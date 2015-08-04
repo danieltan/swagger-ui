@@ -2534,6 +2534,14 @@ function schemaToJSON(schema, models, modelsToIgnore, modelPropertyMacro) {
   // Resolve the schema (Handle nested schemas)
   schema = Helpers.resolveSchema(schema);
 
+  // At startup, there will be oneOfs without references
+  // subsequent regenerations will put the appropriate oneof into the schema instead
+  if(schema.oneOf && !schema.$ref){		 
+	 // for starters, just use the first option in the one of
+	 schema = schema.oneOf[0];
+  }
+
+
   if(typeof modelPropertyMacro !== 'function') {
     modelPropertyMacro = function(prop){
       return (prop || {}).default;
@@ -2588,8 +2596,23 @@ function schemaToJSON(schema, models, modelsToIgnore, modelPropertyMacro) {
       output = true;
     } else if (type === 'object') {
       output = {};
+	var propertyList = schema.properties;
+		// if its "maxProperties": 1 and "minProperties": 1, send either the selected 
+		// property or the first
+		if(schema.maxProperties && schema.maxProperties == 1 && 
+			schema.minProperties && schema.minProperties == 1){
+			// check to see if there is a selected item. If not, define it as
+			// the first item
+			if(!schema.selected){
+				schema.selected = _.keys(schema.properties)[0];
+			}
+			// set which property to generate
+			propertyList = new Object();
+			propertyList[schema.selected] = schema.properties[schema.selected];
+		}
 
-      _.forEach(schema.properties, function (property, name) {
+      _.forEach(propertyList, function (property, name) {
+
         var cProperty = _.cloneDeep(property);
 
         // Allow macro to set the default value
@@ -2681,7 +2704,7 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
       if (!seenModel) {
         seenModels.push(name);
 
-        html += '<br />' + processModel(schema, name);
+        html += processModel(schema, name);
       }
     });
     /* jshint ignore:end */
@@ -2711,7 +2734,55 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
   };
 
   function primitiveToHTML(schema) {
-    var html = '<span class="propType">';
+	  var html = "";
+
+	  // handle oneOfs
+	  if(schema.oneOf){
+
+		  // find the selected item 
+		  var selected = "";
+
+		  // in the initial case, copy the first item into the parent object
+		  // assuming that this is the case if there are no references 
+		  // and no types
+		  if(!schema.$ref && !schema.type){
+			  _.map(schema.oneOf[0], function(value, key){
+				  schema[key] = value;
+			  });
+		  }else{
+			  // select the appropriate option
+			  if(schema.$ref)
+				  selected = Helpers.simpleRef(schema.$ref);
+			  else
+				  selected = schema.type || 'object';
+		  }
+
+		  // generate a select component with each of the possible types
+		  html += '<select class="oneOfSelect">';
+		  html += _.map(schema.oneOf, function (item){
+
+			  var option;
+			  if(item.$ref)
+			  option = Helpers.simpleRef(item.$ref);
+			  else
+			  option = item.type || 'object';
+
+		  var optionHtml = '<option ';
+
+		  // check if option is selected
+		  if(option == selected)
+			  optionHtml += 'selected '
+
+			  optionHtml += 'value="'+option+'">'+option+'</option>';
+		  return optionHtml;
+		  }).join("");
+		  html += '</select>';				
+
+		  // continue generating the selected child
+	  }
+
+	  html += '<span class="propType">';
+
     var type = schema.type || 'object';
 
     if (schema.$ref) {
@@ -2848,7 +2919,7 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
   function processModel(schema, name) {
     var type = schema.type || 'object';
     var isArray = schema.type === 'array';
-    var html = strongOpen + name + ' ' + (isArray ? '[' : '{') + strongClose;
+    var html = "<div>" + strongOpen + name + ' ' + (isArray ? '[' : '{') + strongClose;
 
     if (name) {
       seenModels.push(name);
@@ -2872,7 +2943,7 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
           } else {
             return addReference(item, Helpers.simpleRef(item.$ref));
           }
-        }).join(',</div><div>');
+        }).join('</div><div>');
       } else if (_.isPlainObject(schema.items)) {
         if (_.isUndefined(schema.items.$ref)) {
           if (_.indexOf(['array', 'object'], schema.items.type || 'object') > -1) {
@@ -2898,7 +2969,44 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
         html += '<div>';
 
         if (_.isPlainObject(schema.properties)) {
-          html += _.map(schema.properties, function (property, name) {
+			  
+			var propertyList = schema.properties;
+			  // handle "maxProperties": 1 and "minProperties": 1 which is basically a oneOf
+			if(schema.maxProperties && schema.maxProperties == 1 && 
+				schema.minProperties && schema.minProperties == 1){
+					// check to see if there is a selected item. If not, define it as
+					// the first item
+					if(!schema.selected){
+						schema.selected = _.keys(schema.properties)[0];
+					}
+					// set which property to generate
+					propertyList = new Object();
+					propertyList[schema.selected] = schema.properties[schema.selected];
+					
+					
+					// generate select statement
+					// generate a select component with each of the possible types
+					html += '<select class="oneOfSelectMinMax">';
+					html += _.map(schema.properties, function (item, key){
+						var option;
+						if(item.$ref)
+							option = Helpers.simpleRef(item.$ref);
+						else
+							option = item.type || 'object';
+
+						var optionHtml = '<option ';
+
+						// check if option is selected
+						if(key == schema.selected)
+							optionHtml += 'selected '
+
+						optionHtml += 'value="'+key+'">'+option+'</option>';
+						return optionHtml;
+					}).join("");
+					html += '</select></br>';				
+				}
+			  
+          html += _.map(propertyList, function (property, name) {         
             var propertyIsRequired = (_.indexOf(schema.required, name) >= 0);
             var cProperty = _.cloneDeep(property);
 
@@ -2939,7 +3047,7 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
             }
 
             return primitiveToOptionsHTML(cProperty, html);
-          }).join(',</div><div>');
+          }).join('</div><div>');
         }
 
         html += '</div>';
@@ -2948,7 +3056,7 @@ function schemaToHTML(name, schema, models, modelPropertyMacro) {
       }
     }
 
-    return html + strongOpen + (isArray ? ']' : '}') + strongClose;
+    return html + strongOpen + (isArray ? ']' : '}') + strongClose + '</div>';
   };
 
 };
@@ -31157,7 +31265,7 @@ SwaggerUi.Views.MainView = Backbone.View.extend({
   addResource: function(resource, auths){
     // Render a resource and add it to resources li
     resource.id = resource.id.replace(/\s/g, '_');
-    var resourceView = new SwaggerUi.Views.ResourceView({
+    this.resourceView = new SwaggerUi.Views.ResourceView({
       model: resource,
       router: this.router,
       tagName: 'li',
@@ -31166,7 +31274,7 @@ SwaggerUi.Views.MainView = Backbone.View.extend({
       auths: auths,
       swaggerOptions: this.options.swaggerOptions
     });
-    $('#resources', this.el).append(resourceView.render().el);
+    $('#resources', this.el).append(this.resourceView.render().el);
   },
 
   clear: function(){
@@ -32099,7 +32207,10 @@ SwaggerUi.Views.SignatureView = Backbone.View.extend({
   events: {
     'click a.description-link'       : 'switchToDescription',
     'click a.snippet-link'           : 'switchToSnippet',
-    'mousedown .snippet'          : 'snippetToTextArea'
+    'mousedown .snippet'          : 'snippetToTextArea',
+	 'change .oneOfSelect'			: 'oneOfChange',
+	 'change .oneOfSelectMinMax'	: 'oneOfMinMaxChange'
+
   },
 
   initialize: function () {
@@ -32110,7 +32221,7 @@ SwaggerUi.Views.SignatureView = Backbone.View.extend({
 
     $(this.el).html(Handlebars.templates.signature(this.model));
 
-    this.switchToSnippet();
+    this.switchToDescription();
 
     this.isParam = this.model.isParam;
 
@@ -32153,6 +32264,63 @@ SwaggerUi.Views.SignatureView = Backbone.View.extend({
         textArea.val(this.model.sampleJSON);
       }
     }
+  }, 
+  
+  // handle the change of a oneOf select element
+  oneOfChange: function(e){
+	  var select = $(e.currentTarget);
+	  
+	  // hack, get parent name, property and root model name from dom position
+	  var property = select.siblings().first().text().split(" ")[0];
+	  var parentName = select.parents("div").eq(0).siblings().first().text().split(" ")[0];
+	  var rootModel = $("span:first-child", select.parents("div").eq(1).siblings().first()).text().split(" ")[0];
+		
+		var propModel = swaggerUi.api.models[parentName].definition.properties[property];
+		var index = select.find(':selected').index();
+		
+		// delete all items in the parent except the oneOf and a possible description
+		_.map(propModel, function(value, key){
+			if(key != "oneOf" && key != "description")
+				delete propModel[key];
+		});
+		// copy each of the selected items to the parent object
+		_.map(propModel.oneOf[index], function(value, key){
+			propModel[key] = value;
+		});
+		
+		// recreate json snippet and signature and assign to this model
+		this.model.signature = swaggerUi.api.models[rootModel].getMockSignature();
+		this.model.sampleJSON = JSON.stringify(swaggerUi.api.models[rootModel].createJSONSample(), null, 2);
+	  
+		this.render();
+  },
+  
+  // handle the change of a oneOfMinMax element
+  oneOfMinMaxChange: function(e){
+	  var select = $(e.currentTarget);
+	  
+	  // hack, get parent name and root model name from dom position
+	  var parentName = $("span:first-child", select.parent().parent()).text().split(" ")[0];
+	  var rootModel = $("span:first-child", select.parent().parent().siblings().first()).text().split(" ")[0];
+	  
+	  /*
+		var parentPrefix = "oneOfParent_";
+		// first get parent from the class
+		$($(select).attr('class').split(' ')).each(function() { 
+			if (this.substring(0, parentPrefix.length) == parentPrefix) {
+				parentName = this.substring(parentPrefix.length, this.length).replace(/_/g, '.');
+			}
+		});
+		*/
+		
+		// Update the model with the item that is selected
+		swaggerUi.api.models[parentName].definition.selected =  select.find(':selected').val();
+		// recreate json snippet and signature and assign to this model
+		this.model.signature = swaggerUi.api.models[rootModel].getMockSignature();
+		this.model.sampleJSON = JSON.stringify(swaggerUi.api.models[rootModel].createJSONSample(), null, 2);
+	  
+		this.render();
+	
   }
 });
 'use strict';

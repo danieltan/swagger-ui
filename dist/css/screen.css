@@ -391,7 +391,7 @@
   color: #000;
   font-size: .9em;
 }
-.swagger-section .swagger-ui-wrap .model-signature .description div {
+.swagger-section .swagger-ui-wrap .model-signature .description div > div{
   font-size: 0.9em;
   line-height: 1.5em;
   margin-left: 1em;
@@ -1155,16 +1155,8 @@
 .swagger-section .auth {
   float: right;
 }
-.swagger-section .api-ic {
-  height: 18px;
-  vertical-align: middle;
-  display: inline-block;
-  background: url(../images/explorer_icons.png) no-repeat;
-}
-.swagger-section .api-ic .api_information_panel {
-  position: relative;
-  margin-top: 20px;
-  margin-left: -5px;
+.swagger-section #api_information_panel {
+  position: absolute;
   background: #FFF;
   border: 1px solid #ccc;
   border-radius: 5px;
@@ -1175,32 +1167,34 @@
   color: black;
   padding: 5px;
 }
-.swagger-section .api-ic .api_information_panel p .api-msg-enabled {
+.swagger-section #api_information_panel p .api-msg-enabled {
   color: green;
 }
-.swagger-section .api-ic .api_information_panel p .api-msg-disabled {
+.swagger-section #api_information_panel p .api-msg-disabled {
   color: red;
 }
-.swagger-section .api-ic:hover .api_information_panel {
-  position: absolute;
-  display: block;
+.swagger-section .api-ic {
+  height: 18px;
+  vertical-align: middle;
+  display: inline-block;
+  background: url(../images/explorer_icons.png) no-repeat;
 }
 .swagger-section .ic-info {
   background-position: 0 0;
   width: 18px;
-  margin-top: -6px;
+  margin-top: -7px;
   margin-left: 4px;
 }
 .swagger-section .ic-warning {
   background-position: -60px 0;
   width: 18px;
-  margin-top: -6px;
+  margin-top: -7px;
   margin-left: 4px;
 }
 .swagger-section .ic-error {
   background-position: -30px 0;
   width: 18px;
-  margin-top: -6px;
+  margin-top: -7px;
   margin-left: 4px;
 }
 .swagger-section .ic-off {
